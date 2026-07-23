@@ -1,289 +1,611 @@
 openapi: 3.0.3
 info:
-  title: API Documentation
-  description: API documentation for the Client service (auth, drivers, batteries, swaps)
+  title: Zypp Partner API
+  description: |
+    Partner integration API for fleet management — drivers, batteries, and
+    swap transactions. All endpoints require a bearer token obtained via
+    `POST /v1/auth/login`.
   version: 1.0.0
+
 servers:
   - url: https://test.baas.batterypool.com/client
-    description: Dev server
-
-components:
-  securitySchemes:
-    FirebaseAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-      description: Firebase token required in Authorization header for protected endpoints
+    description: Test/sandbox environment
 
 security:
-  - FirebaseAuth: []
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+  - name: Drivers
+  - name: Batteries
+  - name: Swaps
 
 paths:
-  # ══════════════════════════════════════════════════════════════
-  # AUTH
-  # ══════════════════════════════════════════════════════════════
   /v1/auth/login:
     post:
-      tags:
-        - Auth
-      summary: Login
+      tags: [Auth]
+      summary: Log in
       security: []
       requestBody:
         required: true
         content:
           application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
             example:
-              email: "user@example.com"
-              password: "yourpassword"
+              email: api-zypp-sandbox@batterypool.com
+              password: "your-sandbox-password"
       responses:
-        '200':
-          description: Successful login
+        "200":
+          description: Login successful
           content:
             application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  userId: { type: string }
+                  accessToken: { type: string }
+                  refreshToken: { type: string }
+                  tokenInfo:
+                    type: object
+                    properties:
+                      expiresAt: { type: string, format: date-time }
+                      validFor: { type: string, example: 58min }
               example:
-                token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                refreshToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                message: Login successful.
+                userId: "8DsEmf4C39ZCECiC0TOn"
+                accessToken: "eyJhbGciOiJSUzI1NiIs..."
+                refreshToken: "AMf-vBx3H2paZ2yuz5ahx..."
+                tokenInfo:
+                  expiresAt: "2026-07-22T07:47:40.828Z"
+                  validFor: 58min
+        "400":
+          $ref: "#/components/responses/Error"
 
   /v1/auth/refresh:
     post:
-      tags:
-        - Auth
-      summary: Refresh access token
+      tags: [Auth]
+      summary: Exchange a refresh token for a new token pair
       security: []
       requestBody:
         required: true
         content:
           application/json:
-            example:
-              refreshToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
       responses:
-        '200':
-          description: New access token issued
+        "200":
+          description: New token pair
           content:
             application/json:
-              example:
-                token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  refreshToken: { type: string }
+                  tokenInfo:
+                    type: object
+                    properties:
+                      expiresAt: { type: string, format: date-time }
+                      validFor: { type: string, example: 60min }
+        "400":
+          $ref: "#/components/responses/Error"
 
   /v1/auth/logout:
     post:
-      tags:
-        - Auth
-      summary: Logout current user
+      tags: [Auth]
+      summary: Log out (revokes refresh tokens)
       responses:
-        '200':
-          description: Logged out successfully
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string, example: Logged out successfully. }
 
   /v1/auth/profile:
     get:
-      tags:
-        - Auth
-      summary: Get logged-in user's profile
+      tags: [Auth]
+      summary: Get the current account's profile
       responses:
-        '200':
-          description: User profile returned
+        "200":
+          description: Account profile
           content:
             application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Profile" }
               example:
-                id: "u_123"
-                name: "John Doe"
-                email: "john@example.com"
+                data:
+                  id: lVcfkIw1j5Zq4PwlDF9M
+                  isActive: true
+                  orgName: ZYPP
+                  name: Zypp Sandbox
+                  email: api-zypp-sandbox@batterypool.com
+                  driverConfig:
+                    defaultSwapFees: [3, 35]
 
-  # ══════════════════════════════════════════════════════════════
-  # DRIVERS
-  # ══════════════════════════════════════════════════════════════
   /v1/drivers:
     post:
-      tags:
-        - Drivers
-      summary: Create a new driver
+      tags: [Drivers]
+      summary: Create a driver
       requestBody:
         required: true
         content:
           application/json:
+            schema:
+              type: object
+              required: [driverName, city, phoneNumber, email, driverStatus]
+              properties:
+                driverName: { type: string }
+                city: { type: string }
+                phoneNumber:
+                  type: string
+                  pattern: '^\d{10}$'
+                  description: 10 digits, no country code
+                email: { type: string, format: email }
+                driverStatus:
+                  type: string
+                  enum: [Trial, Onboarded/Active, On-Leave, Blocked, Offboarded]
+                vehicleId: { type: string }
+                driverId:
+                  type: string
+                  description: Optional — if omitted, one is generated automatically.
             example:
-              name: "Ravi Kumar"
-              phone: "9876543210"
-              licenseNumber: "MH12-2023-0001234"
+              driverName: Test Driver
+              city: Hyderabad
+              phoneNumber: "9999999999"
+              email: testdriver@example.com
+              driverStatus: Trial
       responses:
-        '201':
-          description: Driver created
+        "200":
+          description: Driver created — returns the full created record
           content:
             application/json:
-              example:
-                driverId: "drv_001"
-                status: "created"
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Driver" }
+        "400":
+          description: |
+            Validation error or a business conflict. `code` values:
+            DRIVER_ID_EXISTS, EMAIL_ALREADY_EXISTS, PHONE_ALREADY_EXISTS,
+            INVALID_EMAIL, INVALID_PHONE_NUMBER, WEAK_PASSWORD,
+            ACTIVE_DRIVER_AUTH_CONFLICT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "500":
+          $ref: "#/components/responses/Error"
 
     get:
-      tags:
-        - Drivers
-      summary: Get list of all drivers
+      tags: [Drivers]
+      summary: List drivers
+      description: Results are automatically scoped to your organization.
       parameters:
-        - name: page
-          in: query
-          required: false
-          schema:
-            type: integer
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
+        - in: query
+          name: driverId
+          schema: { type: string }
+        - in: query
+          name: driverName
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+          description: Matches driverCurrentStatus, e.g. Trial, Onboarded/Active
+        - in: query
+          name: model
+          schema: { type: string, enum: [Rental, RentalCharger, EmiCharger] }
+        - in: query
+          name: qrStatus
+          schema: { type: string }
+        - in: query
+          name: qrAssigned
+          schema: { type: string, enum: ["true", "false"] }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 10 }
+        - in: query
+          name: offset
+          schema: { type: integer, default: 0 }
       responses:
-        '200':
-          description: List of drivers
+        "200":
+          description: Paginated driver list
           content:
             application/json:
-              example:
-                - driverId: "drv_001"
-                  name: "Ravi Kumar"
-                  status: "active"
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Driver" }
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+        "400":
+          $ref: "#/components/responses/Error"
 
   /v1/drivers/{driverId}:
     get:
-      tags:
-        - Drivers
-      summary: Get driver details by ID
+      tags: [Drivers]
+      summary: Get driver details
       parameters:
-        - name: driverId
-          in: path
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/DriverId"
       responses:
-        '200':
-          description: Driver details
+        "200":
+          description: Driver record
           content:
             application/json:
-              example:
-                driverId: "drv_001"
-                name: "Ravi Kumar"
-                phone: "9876543210"
-                status: "active"
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Driver" }
+        "404":
+          $ref: "#/components/responses/Error"
 
     patch:
-      tags:
-        - Drivers
+      tags: [Drivers]
       summary: Update driver details
       parameters:
-        - name: driverId
-          in: path
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/DriverId"
       requestBody:
-        required: true
         content:
           application/json:
-            example:
-              name: "Ravi K. Sharma"
-              status: "inactive"
+            schema:
+              type: object
+              properties:
+                driverName: { type: string }
+                city: { type: string }
+                phoneNumber: { type: string, pattern: '^\d{10}$' }
+                driverStatus:
+                  type: string
+                  enum: [Trial, Onboarded/Active, On-Leave, Blocked, Offboarded]
+                vehicleId: { type: string }
       responses:
-        '200':
-          description: Driver updated successfully
-
-  # ══════════════════════════════════════════════════════════════
-  # BATTERIES
-  # ══════════════════════════════════════════════════════════════
-  /v1/batteries:
-    get:
-      tags:
-        - Batteries
-      summary: Get list of all batteries
-      responses:
-        '200':
-          description: List of batteries
+        "200":
+          description: Update successful
           content:
             application/json:
-              example:
-                - batteryId: "bat_001"
-                  status: "in_use"
-                  soc: 87
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+        "404":
+          description: "code: DRIVER_NOT_FOUND"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorBody" }
+        "400":
+          $ref: "#/components/responses/Error"
 
   /v1/batteries/assignment:
     post:
-      tags:
-        - Batteries
-      summary: Assign a battery to a driver
+      tags: [Batteries]
+      summary: Assign or deassign a battery to/from a driver
       requestBody:
         required: true
         content:
           application/json:
+            schema:
+              type: object
+              required: [driverId, batteryId, action]
+              properties:
+                driverId: { type: string }
+                batteryId: { type: string }
+                action: { type: string, enum: [assign, deassign] }
             example:
-              driverId: "drv_001"
-              batteryId: "bat_001"
+              driverId: V-2W-PUN-6001
+              batteryId: ML3AJBJNDB00038
+              action: assign
       responses:
-        '200':
-          description: Battery assigned successfully
+        "200":
+          description: Confirmation
           content:
             application/json:
-              example:
-                driverId: "drv_001"
-                batteryId: "bat_001"
-                status: "assigned"
+              schema:
+                type: object
+                properties:
+                  message: { type: string, example: Battery assigned successfully }
+        "400":
+          $ref: "#/components/responses/Error"
 
   /v1/batteries/{batteryId}/iot:
     get:
-      tags:
-        - Batteries
-      summary: Get IoT data for a battery
+      tags: [Batteries]
+      summary: Get latest battery IoT telemetry
       parameters:
-        - name: batteryId
-          in: path
+        - in: path
+          name: batteryId
           required: true
-          schema:
-            type: string
+          schema: { type: string }
       responses:
-        '200':
-          description: Battery IoT data
+        "200":
+          description: Latest telemetry
           content:
             application/json:
-              example:
-                batteryId: "bat_001"
-                voltage: 51.2
-                temperature: 34
-                soc: 87
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/BatteryIot" }
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /v1/batteries:
+    get:
+      tags: [Batteries]
+      summary: List batteries
+      responses:
+        "200":
+          description: Battery list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Battery" }
 
   /v1/batteries/mapping:
     get:
-      tags:
-        - Batteries
-      summary: Get battery-to-driver mapping
+      tags: [Batteries]
+      summary: Battery <-> driver mapping
+      description: |
+        Send either `driverId` or `batteryId` — the response shape differs
+        depending on which one you send. See the two examples below.
+      parameters:
+        - in: query
+          name: driverId
+          schema: { type: string }
+          description: Returns the batteries currently/previously with this driver.
+        - in: query
+          name: batteryId
+          schema: { type: string }
+          description: Returns the driver currently holding this battery, if any.
       responses:
-        '200':
-          description: Battery mapping data
+        "200":
+          description: Shape depends on which query param was sent — see examples.
           content:
             application/json:
-              example:
-                - batteryId: "bat_001"
-                  driverId: "drv_001"
+              schema:
+                type: object
+                properties:
+                  data:
+                    oneOf:
+                      - $ref: "#/components/schemas/BatteryMappingByDriver"
+                      - $ref: "#/components/schemas/BatteryMappingByBattery"
+              examples:
+                byDriverId:
+                  summary: "?driverId=... response"
+                  value:
+                    data:
+                      driverId: V-2W-PUN-2045
+                      assigedBatteries:
+                        - id: ML3AJ3FPBA00361
+                          canId: ML3AJ3FPBA00361
+                          batteryVendor: Livguard
+                          batteryWith:
+                            type: driver
+                            value: V-2W-PUN-2045
+                            meta:
+                              city: Pune
+                              phoneNumber: "919999999999"
+                              driverId: V-2W-PUN-2045
+                              driverName: Test Driver
+                              driverOrganization: ZYPP
+                byBatteryId:
+                  summary: "?batteryId=... response"
+                  value:
+                    data:
+                      batteryId: ML3AJ3FPBA00359
+                      driverDetails:
+                        driverId: V-2W-PUN-2045
+                        name: Test Driver
+                        city: Pune
+                        driverOrganization: ZYPP
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
 
-  # ══════════════════════════════════════════════════════════════
-  # SWAPS
-  # ══════════════════════════════════════════════════════════════
   /v1/swaps:
     get:
-      tags:
-        - Swaps
-      summary: Get swap transaction logs
+      tags: [Swaps]
+      summary: List swap transactions
       parameters:
-        - name: page
-          in: query
-          required: false
-          schema:
-            type: integer
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
+        - in: query
+          name: driverId
+          schema: { type: string }
+        - in: query
+          name: batteryId
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: startDate
+          schema: { type: string, format: date-time }
+        - in: query
+          name: endDate
+          schema: { type: string, format: date-time }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 10 }
+        - in: query
+          name: offset
+          schema: { type: integer, default: 0 }
       responses:
-        '200':
-          description: List of swap transactions
+        "200":
+          description: Paginated swap transaction list
           content:
             application/json:
-              example:
-                - swapId: "swp_001"
-                  driverId: "drv_001"
-                  batteryOut: "bat_001"
-                  batteryIn: "bat_002"
-                  timestamp: "2026-07-23T10:00:00Z"
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/SwapTransaction" }
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    DriverId:
+      in: path
+      name: driverId
+      required: true
+      schema: { type: string }
+
+  responses:
+    Error:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+
+  schemas:
+    ErrorBody:
+      type: object
+      properties:
+        code: { type: string, nullable: true }
+        message: { type: string }
+
+    Pagination:
+      type: object
+      properties:
+        limit: { type: integer }
+        offset: { type: integer }
+        totalCount: { type: integer }
+        currentPage: { type: integer }
+        totalPages: { type: integer }
+
+    Profile:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string }
+        name: { type: string }
+        orgName: { type: string }
+        isActive: { type: boolean }
+        driverConfig:
+          type: object
+          properties:
+            defaultSwapFees:
+              type: array
+              items: { type: number }
+
+    Driver:
+      type: object
+      properties:
+        driverId: { type: string }
+        name: { type: string }
+        email: { type: string }
+        phoneNumber: { type: string }
+        password:
+          type: string
+          description: Driver's account password.
+        city: { type: string }
+        swapFeeArr:
+          type: array
+          items: { type: number }
+        driverCurrentStatus: { type: string }
+        driverOrganization: { type: string }
+        vehicleId: { type: string, nullable: true }
+        _3WBatteries:
+          type: array
+          items: { type: string }
+        _3WPrevBatteries:
+          type: array
+          items: { type: string }
+        createdAt: { type: object, additionalProperties: true }
+        updatedAt: { type: object, additionalProperties: true }
+
+    Battery:
+      type: object
+      properties:
+        id: { type: string, description: Same value as canId }
+        canId: { type: string }
+        batteryVendor: { type: string, nullable: true }
+        driverOrganization: { type: string }
+        batteryWith:
+          type: object
+          properties:
+            type: { type: string, enum: [driver, station, "null"] }
+            value: { type: string }
+            meta:
+              type: object
+              additionalProperties: true
+
+    BatteryMappingByDriver:
+      type: object
+      properties:
+        driverId: { type: string }
+        assigedBatteries:
+          type: array
+          description: 'Field name as returned by the API — not "assignedBatteries".'
+          items: { $ref: "#/components/schemas/Battery" }
+
+    BatteryMappingByBattery:
+      type: object
+      properties:
+        batteryId: { type: string }
+        driverDetails: { $ref: "#/components/schemas/Driver" }
+
+    SwapTransaction:
+      type: object
+      properties:
+        id: { type: string }
+        deviceId: { type: string }
+        driverId: { type: string }
+        driverName: { type: string }
+        swapStatus: { type: string }
+        transactionId: { type: string }
+        swapFee: { type: number }
+        bpShare: { type: number }
+        partnerCommission: { type: number }
+        totalPenaltyApplicable: { type: number }
+        totalSwapFee: { type: number }
+        driverOrganization: { type: string }
+        swapType: { type: string }
+        createdAt: { type: object, additionalProperties: true }
+
+    BatteryIot:
+      type: object
+      properties:
+        canId: { type: string }
+        deviceId: { type: string, nullable: true }
+        soc: { type: number, nullable: true }
+        voltage: { type: number, nullable: true }
+        current: { type: number, nullable: true }
+        temp: { type: number, nullable: true }
+        chargeStatus: { type: string, nullable: true }
+        latitude: { type: number, nullable: true }
+        longitude: { type: number, nullable: true }
+        hasLocation: { type: boolean }
+        lastValidGpsAt: { type: string, nullable: true }
+        alarms:
+          type: object
+          additionalProperties: true
+        freshness:
+          type: object
+          properties:
+            status: { type: string, enum: [live, stale, offline, unknown] }
+            ageMinutes: { type: integer, nullable: true }
