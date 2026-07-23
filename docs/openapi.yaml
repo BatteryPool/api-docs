@@ -1,0 +1,44 @@
+openapi: 3.0.3
+info:
+  title: My Company API
+  description: API documentation for client integration
+  version: 1.0.0
+servers:
+  - url: https://api.yourcompany.com/v1
+    description: Production server
+paths:
+  /users:
+    get:
+      summary: Get list of users
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              example:
+                - id: 1
+                  name: "John Doe"
+    post:
+      summary: Create a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              name: "Jane Doe"
+              email: "jane@example.com"
+      responses:
+        "201":
+          description: User created
+  /users/{id}:
+    get:
+      summary: Get a single user by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Successful response
