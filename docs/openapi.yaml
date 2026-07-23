@@ -1,13 +1,11 @@
 openapi: 3.0.3
 info:
-  title: Client API
+  title: API Documentation
   description: API documentation for the Client service (auth, drivers, batteries, swaps)
   version: 1.0.0
 servers:
-  - url: https://your-api-gateway-url.amazonaws.com/dev
+  - url: https://test.baas.batterypool.com/client
     description: Dev server
-  - url: https://your-api-gateway-url.amazonaws.com/prod
-    description: Production server
 
 components:
   securitySchemes:
