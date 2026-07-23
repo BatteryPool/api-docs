@@ -1,44 +1,291 @@
 openapi: 3.0.3
 info:
-  title: My Company API
-  description: API documentation for client integration
+  title: Client API
+  description: API documentation for the Client service (auth, drivers, batteries, swaps)
   version: 1.0.0
 servers:
-  - url: https://api.yourcompany.com/v1
+  - url: https://your-api-gateway-url.amazonaws.com/dev
+    description: Dev server
+  - url: https://your-api-gateway-url.amazonaws.com/prod
     description: Production server
+
+components:
+  securitySchemes:
+    FirebaseAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Firebase token required in Authorization header for protected endpoints
+
+security:
+  - FirebaseAuth: []
+
 paths:
-  /users:
-    get:
-      summary: Get list of users
-      responses:
-        "200":
-          description: Successful response
-          content:
-            application/json:
-              example:
-                - id: 1
-                  name: "John Doe"
+  # ══════════════════════════════════════════════════════════════
+  # AUTH
+  # ══════════════════════════════════════════════════════════════
+  /v1/auth/login:
     post:
-      summary: Create a new user
+      tags:
+        - Auth
+      summary: Login
+      security: []
       requestBody:
         required: true
         content:
           application/json:
             example:
-              name: "Jane Doe"
-              email: "jane@example.com"
+              email: "user@example.com"
+              password: "yourpassword"
       responses:
-        "201":
-          description: User created
-  /users/{id}:
+        '200':
+          description: Successful login
+          content:
+            application/json:
+              example:
+                token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                refreshToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+  /v1/auth/refresh:
+    post:
+      tags:
+        - Auth
+      summary: Refresh access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              refreshToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      responses:
+        '200':
+          description: New access token issued
+          content:
+            application/json:
+              example:
+                token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+  /v1/auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: Logout current user
+      responses:
+        '200':
+          description: Logged out successfully
+
+  /v1/auth/profile:
     get:
-      summary: Get a single user by ID
+      tags:
+        - Auth
+      summary: Get logged-in user's profile
+      responses:
+        '200':
+          description: User profile returned
+          content:
+            application/json:
+              example:
+                id: "u_123"
+                name: "John Doe"
+                email: "john@example.com"
+
+  # ══════════════════════════════════════════════════════════════
+  # DRIVERS
+  # ══════════════════════════════════════════════════════════════
+  /v1/drivers:
+    post:
+      tags:
+        - Drivers
+      summary: Create a new driver
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              name: "Ravi Kumar"
+              phone: "9876543210"
+              licenseNumber: "MH12-2023-0001234"
+      responses:
+        '201':
+          description: Driver created
+          content:
+            application/json:
+              example:
+                driverId: "drv_001"
+                status: "created"
+
+    get:
+      tags:
+        - Drivers
+      summary: Get list of all drivers
       parameters:
-        - name: id
-          in: path
-          required: true
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          required: false
           schema:
             type: integer
       responses:
-        "200":
-          description: Successful response
+        '200':
+          description: List of drivers
+          content:
+            application/json:
+              example:
+                - driverId: "drv_001"
+                  name: "Ravi Kumar"
+                  status: "active"
+
+  /v1/drivers/{driverId}:
+    get:
+      tags:
+        - Drivers
+      summary: Get driver details by ID
+      parameters:
+        - name: driverId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Driver details
+          content:
+            application/json:
+              example:
+                driverId: "drv_001"
+                name: "Ravi Kumar"
+                phone: "9876543210"
+                status: "active"
+
+    patch:
+      tags:
+        - Drivers
+      summary: Update driver details
+      parameters:
+        - name: driverId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              name: "Ravi K. Sharma"
+              status: "inactive"
+      responses:
+        '200':
+          description: Driver updated successfully
+
+  # ══════════════════════════════════════════════════════════════
+  # BATTERIES
+  # ══════════════════════════════════════════════════════════════
+  /v1/batteries:
+    get:
+      tags:
+        - Batteries
+      summary: Get list of all batteries
+      responses:
+        '200':
+          description: List of batteries
+          content:
+            application/json:
+              example:
+                - batteryId: "bat_001"
+                  status: "in_use"
+                  soc: 87
+
+  /v1/batteries/assignment:
+    post:
+      tags:
+        - Batteries
+      summary: Assign a battery to a driver
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              driverId: "drv_001"
+              batteryId: "bat_001"
+      responses:
+        '200':
+          description: Battery assigned successfully
+          content:
+            application/json:
+              example:
+                driverId: "drv_001"
+                batteryId: "bat_001"
+                status: "assigned"
+
+  /v1/batteries/{batteryId}/iot:
+    get:
+      tags:
+        - Batteries
+      summary: Get IoT data for a battery
+      parameters:
+        - name: batteryId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Battery IoT data
+          content:
+            application/json:
+              example:
+                batteryId: "bat_001"
+                voltage: 51.2
+                temperature: 34
+                soc: 87
+
+  /v1/batteries/mapping:
+    get:
+      tags:
+        - Batteries
+      summary: Get battery-to-driver mapping
+      responses:
+        '200':
+          description: Battery mapping data
+          content:
+            application/json:
+              example:
+                - batteryId: "bat_001"
+                  driverId: "drv_001"
+
+  # ══════════════════════════════════════════════════════════════
+  # SWAPS
+  # ══════════════════════════════════════════════════════════════
+  /v1/swaps:
+    get:
+      tags:
+        - Swaps
+      summary: Get swap transaction logs
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of swap transactions
+          content:
+            application/json:
+              example:
+                - swapId: "swp_001"
+                  driverId: "drv_001"
+                  batteryOut: "bat_001"
+                  batteryIn: "bat_002"
+                  timestamp: "2026-07-23T10:00:00Z"
