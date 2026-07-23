@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: Zypp Partner API
+  title: BP <> ZYPP Client API Documentation
   description: |
     Partner integration API for fleet management — drivers, batteries, and
     swap transactions. All endpoints require a bearer token obtained via
